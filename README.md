@@ -6,7 +6,7 @@
 
 ### Kernel Inspector: A robust, deep-dive inspector that bypasses the standard UI to analyze raw OCP kernel geometry.
 
-- Inspect any selection (Faces, Edges, Vertices) without crashing.
+- Inspect any selection (Faces, Edges, Vertices).
 
 - Visual Debugging: Highlights Face Normals (Yellow), Wire Start/End points (Blue/Red), and Vertex locations.
 

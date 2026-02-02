@@ -32,7 +32,216 @@ from ..utils import get_save_filename, get_open_filename, confirm
 from .pyhighlight import PythonHighlighter
 
 from ..icons import icon
+from PyQt5.QtWidgets import QAction, QFileDialog, QMessageBox
 
+import os
+import sys
+import ezdxf
+import math
+from PyQt5.QtWidgets import QAction, QFileDialog, QMessageBox, QApplication, QMenu
+
+TOLERANCE = 1e-4  
+ROUND_DIGITS = 4  
+
+def clean(val):
+    if abs(val) < 1e-9:
+        return 0.0
+    return round(val, ROUND_DIGITS)
+
+class WalkerEntity:
+    def __init__(self, ent_type, original_entity, start=None, end=None):
+        self.type = ent_type 
+        self.obj = original_entity
+        
+        # Standard primitives (Line/Arc/Spline) have start/end for chaining
+        if start is not None:
+            if hasattr(start, 'x'):
+                self.start = (clean(start.x), clean(start.y))
+            else:
+                self.start = (clean(start[0]), clean(start[1]))
+        else:
+            self.start = None
+
+        if end is not None:
+            if hasattr(end, 'x'):
+                self.end = (clean(end.x), clean(end.y))
+            else:
+                self.end = (clean(end[0]), clean(end[1]))
+        else:
+            self.end = None
+
+def vec_eq(v1, v2):
+    return math.dist(v1, v2) < TOLERANCE
+
+def get_arc_midpoint(center, radius, start_angle, end_angle):
+    if end_angle < start_angle:
+        end_angle += 360
+    mid_angle_deg = (start_angle + end_angle) / 2
+    mid_rad = math.radians(mid_angle_deg)
+    
+    mx = center[0] + radius * math.cos(mid_rad)
+    my = center[1] + radius * math.sin(mid_rad)
+    return (clean(mx), clean(my))
+
+def sample_spline(spline_entity):
+    construction = spline_entity.construction_tool()
+    points = list(construction.flattening(distance=0.1))
+    return [(clean(p[0]), clean(p[1])) for p in points]
+
+def parse_dxf(filepath):
+    try:
+        doc = ezdxf.readfile(filepath)
+    except Exception as e:
+        print(f"Error reading DXF: {e}")
+        return None
+
+    msp = doc.modelspace()
+    entities = []
+
+    
+    for e in msp.query('LINE ARC SPLINE LWPOLYLINE CIRCLE ELLIPSE'):
+        
+        if e.dxftype() == 'LWPOLYLINE':
+            sub_ents = e.virtual_entities()
+        else:
+            sub_ents = [e]
+
+        for sub in sub_ents:
+            dtype = sub.dxftype()
+            
+            if dtype == 'LINE':
+                entities.append(WalkerEntity('LINE', sub, sub.dxf.start, sub.dxf.end))
+            
+            elif dtype == 'ARC':
+                c = sub.dxf.center
+                r = sub.dxf.radius
+                s_rad = math.radians(sub.dxf.start_angle)
+                e_rad = math.radians(sub.dxf.end_angle)
+                class Point:
+                    def __init__(self, x, y): self.x, self.y = x, y
+                start_pt = Point(c[0] + r * math.cos(s_rad), c[1] + r * math.sin(s_rad))
+                end_pt = Point(c[0] + r * math.cos(e_rad), c[1] + r * math.sin(e_rad))
+                entities.append(WalkerEntity('ARC', sub, start_pt, end_pt))
+                
+            elif dtype == 'SPLINE':
+                tool = sub.construction_tool()
+                knots = tool.knots()
+                start_pt = tool.point(knots[0])
+                end_pt = tool.point(knots[-1])
+                entities.append(WalkerEntity('SPLINE', sub, start_pt, end_pt))
+            
+            elif dtype == 'CIRCLE':
+                entities.append(WalkerEntity('CIRCLE', sub))
+            
+            elif dtype == 'ELLIPSE':
+                entities.append(WalkerEntity('ELLIPSE', sub))
+
+    return entities
+
+def generate_cq_code(filepath):
+    pool = parse_dxf(filepath)
+    if not pool: 
+        return "print('Error: No valid geometry found in DXF')"
+
+    chain = "cq.Workplane('XY')"
+    
+    while pool:
+        current_ent = pool.pop(0)
+        
+        # --- SPECIAL CASE: CLOSED PRIMITIVES (Circle/Ellipse) ---
+        # These are "One-Shot" loops. We move to center, draw, and we are done.
+        if current_ent.type == 'CIRCLE':
+            c = current_ent.obj.dxf.center
+            r = current_ent.obj.dxf.radius
+            chain += f".moveTo({clean(c[0])}, {clean(c[1])}).circle({clean(r)})"
+            continue # Skip the neighbor search, we are done with this loop
+
+        elif current_ent.type == 'ELLIPSE':
+            c = current_ent.obj.dxf.center
+            major = current_ent.obj.dxf.major_axis # Vector (dx, dy, dz)
+            ratio = current_ent.obj.dxf.ratio
+            
+            # Calculate Major/Minor Axis lengths
+            # CadQuery .ellipse(w, h) expects radiusX and radiusY
+            major_len = math.hypot(major[0], major[1])
+            minor_len = major_len * ratio
+            
+            # Simple Axis-Aligned check (CadQuery .ellipse is axis aligned by default)
+            # If the ellipse is rotated (major axis has both X and Y components), 
+            # this simple generated code might need manual rotation, but works for standard alignment.
+            width = major_len
+            height = minor_len
+            
+            # If major axis is Vertical (0, 1), we flip width/height
+            if abs(major[0]) < abs(major[1]):
+                width, height = height, width
+
+            chain += f".moveTo({clean(c[0])}, {clean(c[1])}).ellipse({clean(width)}, {clean(height)})"
+            continue 
+
+        # --- STANDARD WALKER (Lines/Arcs/Splines) ---
+        # Move pen to start position
+        chain += f".moveTo({current_ent.start[0]}, {current_ent.start[1]})"
+        current_pos = current_ent.end
+        
+        # Process first entity
+        if current_ent.type == 'LINE':
+            chain += f".lineTo({current_ent.end[0]}, {current_ent.end[1]})"
+        elif current_ent.type == 'ARC':
+            mid = get_arc_midpoint(current_ent.obj.dxf.center, current_ent.obj.dxf.radius, current_ent.obj.dxf.start_angle, current_ent.obj.dxf.end_angle)
+            chain += f".threePointArc({mid}, {current_ent.end})"
+        elif current_ent.type == 'SPLINE':
+            pts = sample_spline(current_ent.obj)
+            pts_str = ", ".join([str(p) for p in pts[0:]])
+            chain += f".spline([{pts_str}])"
+
+        # Walk the chain
+        found_next = True
+        while found_next:
+            found_next = False
+            for i, ent in enumerate(pool):
+                # Skip closed primitives if they somehow got into the neighbor search
+                if ent.type in ['CIRCLE', 'ELLIPSE']: 
+                    continue
+
+                # CHECK FORWARD
+                if vec_eq(ent.start, current_pos):
+                    if ent.type == 'LINE':
+                        chain += f".lineTo({ent.end[0]}, {ent.end[1]})"
+                    elif ent.type == 'ARC':
+                        mid = get_arc_midpoint(ent.obj.dxf.center, ent.obj.dxf.radius, ent.obj.dxf.start_angle, ent.obj.dxf.end_angle)
+                        chain += f".threePointArc({mid}, {ent.end})"
+                    elif ent.type == 'SPLINE':
+                        pts = sample_spline(ent.obj)
+                        pts_str = ", ".join([str(p) for p in pts[0:]])
+                        chain += f".spline([{pts_str}])"
+                    
+                    current_pos = ent.end
+                    pool.pop(i)
+                    found_next = True
+                    break
+                
+                # CHECK REVERSE
+                elif vec_eq(ent.end, current_pos):
+                    if ent.type == 'LINE':
+                        chain += f".lineTo({ent.start[0]}, {ent.start[1]})"
+                    elif ent.type == 'ARC':
+                        mid = get_arc_midpoint(ent.obj.dxf.center, ent.obj.dxf.radius, ent.obj.dxf.start_angle, ent.obj.dxf.end_angle)
+                        chain += f".threePointArc({mid}, {ent.start})"
+                    elif ent.type == 'SPLINE':
+                        pts = sample_spline(ent.obj)
+                        pts.reverse()
+                        pts_str = ", ".join([str(p) for p in pts[0:]])
+                        chain += f".spline([{pts_str}])"
+                    
+                    current_pos = ent.start
+                    pool.pop(i)
+                    found_next = True
+                    break
+            
+        chain += ".close()"
+
+    return chain
 
 class EditorDebugger:
     def __init__(self):
@@ -133,7 +342,16 @@ class Editor(CodeEditor, ComponentMixin):
                     checked=False,
                     objectName="autoreload",
                 ),
-            ]
+            ],
+            "Tools": [
+                QAction(
+                    icon("arrow-continue"), # Use 'edit-paste' if you don't have a 'dxf' icon yet
+                    "Insert DXF Face...",
+                    self,
+                    shortcut="Ctrl+Shift+I",
+                    triggered=self.insert_dxf_logic # We will define this next
+                ),
+            ],
         }
 
         for a in self._actions.values():
@@ -167,6 +385,22 @@ class Editor(CodeEditor, ComponentMixin):
         self.completion_list.installEventFilter(self)
 
         self.highlighter = PythonHighlighter(self.document())
+
+    def insert_dxf_logic(self):
+        filename, _ = QFileDialog.getOpenFileName(
+            self, "Select DXF", "", "DXF Files (*.dxf)"
+        )
+        if filename:
+            try:
+                code = generate_cq_code(filename)
+                
+                self.code_edit.textCursor().insertText(code)
+                
+                if hasattr(self, 'statusChanged'):
+                    self.statusChanged.emit(f"Imported: {filename}")
+                    
+            except Exception as e:
+                QMessageBox.critical(self, "DXF Import Error", str(e))
 
     def eventFilter(self, watched, event):
         """

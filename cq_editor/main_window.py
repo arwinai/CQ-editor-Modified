@@ -22,7 +22,6 @@ from .widgets.traceback_viewer import TracebackPane
 from .widgets.debugger import Debugger, LocalsView
 from .widgets.cq_object_inspector import CQObjectInspector
 from .widgets.log import LogViewer
-
 from . import __version__
 from .utils import (
     dock,
@@ -36,7 +35,7 @@ from .mixins import MainMixin
 from .icons import icon
 from pyqtgraph.parametertree import Parameter
 from .preferences import PreferencesWidget
-
+from .widgets.kernel_inspector import KernelInspector
 
 class _PrintRedirectorSingleton(QObject):
     """This class monkey-patches `sys.stdout.write` to emit a signal.
@@ -238,7 +237,11 @@ class MainWindow(QMainWindow, MainMixin):
             TracebackPane(self),
             lambda c: dock(c, "Current traceback", self, defaultArea="bottom"),
         )
-
+        self.registerComponent(
+            "kernel_inspector",
+            KernelInspector(self),
+            lambda c: dock(c, "Kernel Inspector", self, defaultArea="right"),
+        )
         self.registerComponent("debugger", Debugger(self))
 
         self.registerComponent(

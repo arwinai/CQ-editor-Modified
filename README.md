@@ -1,50 +1,65 @@
-# CQ-editor
+# Modified CQ-Editor
 
-[![Build status](https://ci.appveyor.com/api/projects/status/g98rs7la393mgy91/branch/master?svg=true)](https://ci.appveyor.com/project/adam-urbanczyk/cq-editor/branch/master)
-[![codecov](https://codecov.io/gh/CadQuery/CQ-editor/branch/master/graph/badge.svg)](https://codecov.io/gh/CadQuery/CQ-editor)
-[![Build Status](https://dev.azure.com/cadquery/CQ-editor/_apis/build/status/CadQuery.CQ-editor?branchName=master)](https://dev.azure.com/cadquery/CQ-editor/_build/latest?definitionId=3&branchName=master)
-[![DOI](https://zenodo.org/badge/136604983.svg)](https://zenodo.org/badge/latestdoi/136604983)
+---
 
-CadQuery GUI editor based on PyQT that supports Linux, Windows and Mac.
+## Features
 
-![CQ-editor screenshot](https://github.com/CadQuery/CQ-editor/raw/master/screenshots/screenshot4.png)
-Additional screenshots are available in [the wiki](https://github.com/CadQuery/CQ-editor/wiki#screenshots).
+### Kernel Inspector: A robust, deep-dive inspector that bypasses the standard UI to analyze raw OCP kernel geometry.
 
-## Notable features
+- Inspect any selection (Faces, Edges, Vertices) without crashing.
 
-* Automatic code reloading - you can use your favourite editor
-* OCCT based
-* Graphical debugger for CadQuery scripts
-  * Step through script and watch how your model changes
-* CadQuery object stack inspector
-  * Visual inspection of current workplane and selected items
-  * Insight into evolution of the model
-* Export to various formats
-  * STL
-  * STEP
+- Visual Debugging: Highlights Face Normals (Yellow), Wire Start/End points (Blue/Red), and Vertex locations.
 
-## Documentation
+- Unwraps "Compounds" automatically to show true geometry data (Area, Length, Volume).
 
-Documentation is available in [the wiki](https://github.com/CadQuery/CQ-editor/wiki). Topics covered are the following.
+### DXF Importer: Native "Insert DXF" tool in the editor
 
-* [Installation](https://github.com/CadQuery/CQ-editor/wiki/Installation)
-* [Usage](https://github.com/CadQuery/CQ-editor/wiki/Usage)
-* [Configuration](https://github.com/CadQuery/CQ-editor/wiki/Configuration)
+- Accessible via Tools > Insert DXF... or Ctrl+Shift+I.
 
-## Getting Help
+- Converts DXF geometry directly into clean cadquery code strings inserted at your cursor.
 
-For general questions and discussion about CQ-editor, please create a [GitHub Discussion](https://github.com/CadQuery/CQ-editor/discussions).
+---
 
-## Reporting a Bug
+## Installation
 
-If you believe that you have found a bug in CQ-editor, please ensure the following.
+### 1. Prerequisites
 
-* You are not running a CQ-editor fork, as these are not always synchronized with the latest updates in this project.
-* You have searched the [issue tracker](https://github.com/CadQuery/CQ-editor/issues) to make sure that the bug is not already known.
+Use Mamba or Conda to manage the dependencies
 
-If you have already checked those things, please file a [new issue](https://github.com/CadQuery/CQ-editor/issues/new) with the following information.
+### 2. Clone the Repository
 
-* Operating System (type, version, etc) - If running Linux, please include the distribution and the version.
-* How CQ-editor was installed.
-* Python version of your environment (unless you are running a pre-built package).
-* Steps to reproduce the bug.
+```bash
+git clone https://github.com/arwinai/CQ-editor-Modified.git
+cd CQ-editor-Modified
+```
+
+### 3. Create the Environment
+
+Use the included environment file to pull the core OCP/CadQuery libraries
+
+```bash
+# Using Mamba
+mamba env create -f cqgui_env.yml -n cq-modified
+
+# OR Using standard Conda
+conda env create -f cqgui_env.yml -n cq-modified
+```
+
+### 4. Install Extra Dependencies
+
+Activate the environment and install the dxf library.
+
+```bash
+conda activate cq-modified
+pip install ezdxf
+pip install -e . --no-deps
+```
+
+---
+
+## Running
+
+```bash
+conda activate cq-modified
+cq-editor
+```

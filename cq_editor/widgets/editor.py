@@ -39,7 +39,7 @@ import sys
 import ezdxf
 import math
 from PyQt5.QtWidgets import QAction, QFileDialog, QMessageBox, QApplication, QMenu
-
+from .wire_walker import generate_wire_code
 TOLERANCE = 1e-4  
 ROUND_DIGITS = 4  
 
@@ -148,39 +148,31 @@ def generate_cq_code(filepath):
     while pool:
         current_ent = pool.pop(0)
         
-        # --- SPECIAL CASE: CLOSED PRIMITIVES (Circle/Ellipse) ---
-        # These are "One-Shot" loops. We move to center, draw, and we are done.
         if current_ent.type == 'CIRCLE':
             c = current_ent.obj.dxf.center
             r = current_ent.obj.dxf.radius
             chain += f".moveTo({clean(c[0])}, {clean(c[1])}).circle({clean(r)})"
-            continue # Skip the neighbor search, we are done with this loop
+            continue 
 
         elif current_ent.type == 'ELLIPSE':
             c = current_ent.obj.dxf.center
-            major = current_ent.obj.dxf.major_axis # Vector (dx, dy, dz)
+            major = current_ent.obj.dxf.major_axis 
             ratio = current_ent.obj.dxf.ratio
             
-            # Calculate Major/Minor Axis lengths
-            # CadQuery .ellipse(w, h) expects radiusX and radiusY
             major_len = math.hypot(major[0], major[1])
             minor_len = major_len * ratio
             
-            # Simple Axis-Aligned check (CadQuery .ellipse is axis aligned by default)
-            # If the ellipse is rotated (major axis has both X and Y components), 
-            # this simple generated code might need manual rotation, but works for standard alignment.
             width = major_len
             height = minor_len
             
-            # If major axis is Vertical (0, 1), we flip width/height
+
             if abs(major[0]) < abs(major[1]):
                 width, height = height, width
 
             chain += f".moveTo({clean(c[0])}, {clean(c[1])}).ellipse({clean(width)}, {clean(height)})"
             continue 
 
-        # --- STANDARD WALKER (Lines/Arcs/Splines) ---
-        # Move pen to start position
+
         chain += f".moveTo({current_ent.start[0]}, {current_ent.start[1]})"
         current_pos = current_ent.end
         
@@ -351,6 +343,13 @@ class Editor(CodeEditor, ComponentMixin):
                     shortcut="Ctrl+Shift+I",
                     triggered=self.insert_dxf_logic # We will define this next
                 ),
+                QAction(
+                    icon("arrow-continue"),
+                    "Insert Path from File (STEP)...",
+                    self,
+                    shortcut="Ctrl+Shift+P",
+                    triggered=self.insert_path_logic
+                )
             ],
         }
 
@@ -394,13 +393,27 @@ class Editor(CodeEditor, ComponentMixin):
             try:
                 code = generate_cq_code(filename)
                 
-                self.code_edit.textCursor().insertText(code)
+                self.textCursor().insertText(code)
                 
                 if hasattr(self, 'statusChanged'):
                     self.statusChanged.emit(f"Imported: {filename}")
                     
             except Exception as e:
                 QMessageBox.critical(self, "DXF Import Error", str(e))
+
+    def insert_path_logic(self):
+        filename, _ = QFileDialog.getOpenFileName(
+            self, 
+            "Select Path File", 
+            "", 
+            "Geometry Files (*.step *.stp)"
+        )
+        if filename:
+            try:
+                code = generate_wire_code(filename)
+                self.textCursor().insertText(code)
+            except Exception as e:
+                QMessageBox.critical(self, "Import Error", str(e))
 
     def eventFilter(self, watched, event):
         """

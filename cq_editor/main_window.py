@@ -36,7 +36,7 @@ from .icons import icon
 from pyqtgraph.parametertree import Parameter
 from .preferences import PreferencesWidget
 from .widgets.kernel_inspector import KernelInspector
-
+# from .widgets.pathfinder import Pathfinder
 class _PrintRedirectorSingleton(QObject):
     """This class monkey-patches `sys.stdout.write` to emit a signal.
     It is instanciated as `.main_window.PRINT_REDIRECTOR` and should not be instanciated again.
@@ -242,6 +242,13 @@ class MainWindow(QMainWindow, MainMixin):
             KernelInspector(self),
             lambda c: dock(c, "Kernel Inspector", self, defaultArea="right"),
         )
+        # self.registerComponent(
+        #     "pathfinder",
+        #     Pathfinder(self),
+        #     lambda c: dock(c, "Pathfinder", self, defaultArea="left"),
+        # )
+        # if "object_tree" in self.docks and "pathfinder" in self.docks:
+        #     self.tabifyDockWidget(self.docks["object_tree"], self.docks["pathfinder"])
         self.registerComponent("debugger", Debugger(self))
 
         self.registerComponent(

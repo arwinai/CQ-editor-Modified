@@ -18,6 +18,12 @@
 
 - Converts DXF geometry directly into clean cadquery code strings inserted at your cursor.
 
+### STEP Importer: Native "Insert Path" tool in the editor
+
+- Accessible via Tools > Insert Path... or Ctrl+Shift+P.
+
+- Takes a Step file containing a 3d wire as input and converts it to a cadquery code string inserted at your cursor.
+
 ---
 
 ## Installation

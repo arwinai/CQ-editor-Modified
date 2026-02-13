@@ -261,6 +261,10 @@ class KernelInspector(QWidget, ComponentMixin):
         elif stype == "Solid":
             try:
                 self.add_child(parent, "Volume", f"{shape.Volume():.4f} mm³")
+                # let's add bounding box dimensions for solids
+                bb = shape.BoundingBox()
+                self.add_child(parent, "Bounding Box", f"{bb.xlen:.2f} x {bb.ylen:.2f} x {bb.zlen:.2f}")
+                
             except: pass
 
     def add_pair(self, k, v):

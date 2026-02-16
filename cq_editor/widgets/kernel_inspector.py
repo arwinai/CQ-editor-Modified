@@ -5,7 +5,6 @@ from ..mixins import ComponentMixin
 
 import cadquery as cq
 
-
 from OCP.AIS import AIS_Shape, AIS_Point
 from OCP.Geom import Geom_CartesianPoint
 from OCP.Prs3d import Prs3d_PointAspect
@@ -142,7 +141,9 @@ class KernelInspector(QWidget, ComponentMixin):
         shape = item.data(0, Qt.UserRole)
         if shape: self.highlight_shape(shape)
         elif item.parent() and item.parent().data(0, Qt.UserRole):
+            # Fallback to parent if child has no geometry data
             self.highlight_shape(item.parent().data(0, Qt.UserRole))
+
     def draw_marker(self, vec, color_enum, ctx=None):
         """ Helper to draw a dot at a specific coordinate """
         geom_pt = Geom_CartesianPoint(vec.x, vec.y, vec.z)
@@ -183,7 +184,8 @@ class KernelInspector(QWidget, ComponentMixin):
                     self.draw_marker(shape.endPoint(), Quantity_NOC_RED, ctx)
                     self.draw_marker(shape.startPoint(), Quantity_NOC_BLUE, ctx) 
                 except: 
-                    print("Edge marker draw error")
+                    # Wires might not have simple start/end if closed or complex
+                    pass
 
             if stype == "Face":
                 try:
@@ -233,8 +235,23 @@ class KernelInspector(QWidget, ComponentMixin):
             ctx.UpdateCurrentViewer()
         self.temp_objects = []
 
+    def add_topology_group(self, parent, name, shape_list):
+        """ Creates a folder in the tree for a list of shapes (e.g., 'Faces') """
+        if not shape_list:
+            return
+
+        group_item = QTreeWidgetItem(parent, [name, str(len(shape_list))])
+        
+        for i, s in enumerate(shape_list):
+            child_label = f"{s.ShapeType()}[{i}]"
+            child = QTreeWidgetItem(group_item, [child_label, ""])
+            child.setData(0, Qt.UserRole, s)
+            
+            self.inspect_shape(s, child)
+
     def inspect_shape(self, shape, parent):
         stype = shape.ShapeType()
+        
         try:
             bb = shape.BoundingBox()
             self.add_child(parent, "Dimensions", f"{bb.xlen:.2f} x {bb.ylen:.2f} x {bb.zlen:.2f}")
@@ -245,12 +262,14 @@ class KernelInspector(QWidget, ComponentMixin):
         if stype == "Edge" or stype == "Wire":
             try:
                 self.add_child(parent, "Length", f"{shape.Length():.4f} mm")
-                self.add_child(parent, "Curve Type", shape.geomType())
-                sp = shape.positionAt(0)
-                self.add_child(parent, "Start Point", f"({sp.x:.2f}, {sp.y:.2f}, {sp.z:.2f})")
-                ep = shape.positionAt(1)
-                self.add_child(parent, "End Point", f"({ep.x:.2f}, {ep.y:.2f}, {ep.z:.2f})")
+                if stype == "Edge":
+                    self.add_child(parent, "Curve Type", shape.geomType())
+                    sp = shape.positionAt(0)
+                    self.add_child(parent, "Start Point", f"({sp.x:.2f}, {sp.y:.2f}, {sp.z:.2f})")
+                    ep = shape.positionAt(1)
+                    self.add_child(parent, "End Point", f"({ep.x:.2f}, {ep.y:.2f}, {ep.z:.2f})")
             except: pass
+        
         elif stype == "Face":
             try:
                 self.add_child(parent, "Area", f"{shape.Area():.4f} mm²")
@@ -258,14 +277,28 @@ class KernelInspector(QWidget, ComponentMixin):
                 norm = shape.normalAt(shape.Center())
                 self.add_child(parent, "Normal Vector", f"({norm.x:.4f}, {norm.y:.4f}, {norm.z:.4f})")
             except: pass
+            
         elif stype == "Solid":
             try:
                 self.add_child(parent, "Volume", f"{shape.Volume():.4f} mm³")
-                # let's add bounding box dimensions for solids
-                bb = shape.BoundingBox()
-                self.add_child(parent, "Bounding Box", f"{bb.xlen:.2f} x {bb.ylen:.2f} x {bb.zlen:.2f}")
-                
             except: pass
+        if stype == "Solid":
+            self.add_topology_group(parent, "Faces", shape.Faces())
+            self.add_topology_group(parent, "Wires", shape.Wires())
+            self.add_topology_group(parent, "Edges", shape.Edges())
+            # self.add_topology_group(parent, "Vertices", shape.Vertices())
+
+        elif stype == "Face":
+            self.add_topology_group(parent, "Wires", shape.Wires())
+            self.add_topology_group(parent, "Edges", shape.Edges())
+            
+        elif stype == "Wire":
+            self.add_topology_group(parent, "Edges", shape.Edges())
+            # self.add_topology_group(parent, "Vertices", shape.Vertices())
+
+        elif stype == "Edge":
+            # self.add_topology_group(parent, "Vertices", shape.Vertices())
+            pass
 
     def add_pair(self, k, v):
         QTreeWidgetItem(self.tree, [k, str(v)])

@@ -12,17 +12,25 @@
 
 - Unwraps "Compounds" automatically to show true geometry data (Area, Length, Volume).
 
+- Open the Kernel Inspector by going to View > Kernel Inspector
+
+![Face selection demonstration for the kernel inspector](/screenshots/face_select_screenshot.png)
+
 ### DXF Importer: Native "Insert DXF" tool in the editor
 
 - Accessible via Tools > Insert DXF... or Ctrl+Shift+I.
 
 - Converts DXF geometry directly into clean cadquery code strings inserted at your cursor.
 
+![DXF Importer demonstration](/screenshots/dxf_importer_screenshot.png)
+
 ### STEP Importer: Native "Insert Path" tool in the editor
 
 - Accessible via Tools > Insert Path... or Ctrl+Shift+P.
 
 - Takes a Step file containing a 3d wire as input and converts it to a cadquery code string inserted at your cursor.
+
+![3d Wire Import demonstration for STEP importer](/screenshots/step_importer_screenshot.png)
 
 ---
 

@@ -54,8 +54,9 @@ def _analyze_chain(edges):
         if current_points:
             clean = []
             for p in current_points:
-                if not clean or clean[-1] != p:
-                    clean.append(p)
+                if not clean or (clean[-1] - p).Length > 1e-7:
+                     clean.append(p)
+            
             if len(clean) > 1:
                 commands.append((current_type, clean))
             current_points = []
@@ -70,7 +71,8 @@ def _analyze_chain(edges):
             pts.append(edge.endPoint())
         else:
             adaptor = BRepAdaptor_Curve(edge.wrapped)
-            discretizer = GCPnts_QuasiUniformDeflection(adaptor, 0.1)
+            discretizer = GCPnts_QuasiUniformDeflection(adaptor, 1e-3)
+            
             if discretizer.IsDone():
                 for i in range(1, discretizer.NbPoints() + 1):
                     p = discretizer.Value(i)
@@ -82,7 +84,6 @@ def _analyze_chain(edges):
             current_points = pts
         else:
             if current_points and pts:
-
                 if (current_points[-1] - pts[0]).Length < 1e-4:
                     current_points.extend(pts[1:])
                 else:

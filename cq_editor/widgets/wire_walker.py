@@ -71,7 +71,7 @@ def _analyze_chain(edges):
             pts.append(edge.endPoint())
         else:
             adaptor = BRepAdaptor_Curve(edge.wrapped)
-            discretizer = GCPnts_QuasiUniformDeflection(adaptor, 1e-3)
+            discretizer = GCPnts_QuasiUniformDeflection(adaptor, 1e-2)
             
             if discretizer.IsDone():
                 for i in range(1, discretizer.NbPoints() + 1):
